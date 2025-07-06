@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App de Planejamento da Viagem</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8F9FA;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 320px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .timeline-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border-left-width: 4px;
+            min-height: 150px;
+        }
+        .delete-btn {
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        .delete-btn:hover {
+            opacity: 1;
+        }
+        input[type="text"], input[type="number"] {
+            border: 1px solid #D1D5DB;
+            border-radius: 0.375rem;
+            padding: 0.25rem 0.5rem;
+            width: 100%;
+        }
+        .tab-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background-color: #6B5B95;
+            color: white;
+        }
+        .tab-btn:not(.active) {
+            background-color: #E9E7F2;
+            color: #6B5B95;
+        }
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .accordion-header {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+            padding: 0 1.5rem;
+        }
+        .accordion-content.open {
+            max-height: 5000px; /* valor alto para permitir expansão */
+            padding: 1.5rem;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div id="loader">Carregando planos...</div>
+
+    <div class="container mx-auto p-4 md:p-8">
+        <nav class="flex justify-center gap-4 mb-8">
+            <button id="tab-planner" class="tab-btn active">Planejar</button>
+            <button id="tab-gallery" class="tab-btn">Ver Planos Salvos</button>
+        </nav>
+
+        <!-- Planner Page -->
+        <div id="planner-page">
+            <header class="text-center mb-12">
+                <h1 class="text-4xl md:text-5xl font-black text-[#6B5B95] tracking-tight">Planejador da Viagem</h1>
+                <p class="text-lg text-gray-600 mt-2">Crie ou edite o seu plano para a viagem.</p>
+            </header>
+
+            <section class="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center mb-12">
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <p class="text-5xl font-extrabold text-[#FF6F61]" contenteditable="true" id="peopleCount">7</p>
+                    <p class="text-lg font-bold text-gray-700 mt-2">Pessoas</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <p class="text-5xl font-extrabold text-[#FF6F61]" contenteditable="true" id="daysCount">7</p>
+                    <p class="text-lg font-bold text-gray-700 mt-2">Dias</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <p class="text-5xl font-extrabold text-[#FF6F61]" id="mealsCount">25+</p>
+                    <p class="text-lg font-bold text-gray-700 mt-2">Refeições Planejadas</p>
+                </div>
+            </section>
+
+            <main class="grid grid-cols-1 gap-8">
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-center mb-4">Visão Geral do Cardápio</h2>
+                    <div class="chart-container"><canvas id="planner-mealTypesChart"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-center mb-6">Cronograma Gastronômico da Semana</h2>
+                    <div id="planner-meal-plan-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></div>
+                </div>
+                <div class="mt-8">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
+                        <h2 class="text-3xl font-bold text-center sm:text-left">Lista de Compras Detalhada</h2>
+                        <button id="save-plan-btn" class="bg-[#6B5B95] text-white font-bold py-3 px-6 rounded-lg hover:bg-[#594a84] transition-colors w-full sm:w-auto">
+                            Salvar Plano na Nuvem
+                        </button>
+                    </div>
+                    <div id="planner-shopping-list-container" class="grid grid-cols-1 lg:grid-cols-2 gap-8"></div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Gallery Page -->
+        <div id="gallery-page" class="hidden">
+            <header class="text-center mb-12">
+                <h1 class="text-4xl md:text-5xl font-black text-[#6B5B95] tracking-tight">Galeria de Planos</h1>
+                <p class="text-lg text-gray-600 mt-2">Veja e compare os planos salvos pela equipe.</p>
+            </header>
+            <div id="gallery-container" class="space-y-4">
+                <!-- Saved plans will be rendered here -->
+            </div>
+        </div>
+
+        <footer class="text-center mt-12 text-gray-500 text-sm">
+            <p>Os dados são salvos online para acesso de todos.</p>
+            <p>Boa viagem e bom apetite a todos!</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÃO DA API ---
+        const JSONBIN_API_KEY = '$2a$10$fGUjX0pwcse6q57vY9b9tu3vd17P0u9P3FsD3fm4Ct5M/LifLJQuu'; // <-- Cole sua Chave Mestra aqui
+        const JSONBIN_BIN_ID = '686afaf58561e97a5032a4dc'; // <-- Cole o ID do seu Bin aqui
+        const JSONBIN_API_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
+        // --- ESTRUTURA DE DADOS ---
+        let currentPlan;
+        let allPlans = [];
+        const defaultData = {
+            id: null, name: null, creatorName: null,
+            settings: { people: 7, days: 7 },
+            mealPlan: [ { day: 1, meals: ['Miojo', 'Cachorro-Quente'] }, { day: 2, meals: ['Misto Quente', 'Filé com Arroz'] }, { day: 3, meals: ['Churrasco Completo'] }, { day: 4, meals: ['Misto Quente', 'Macarronada'] }, { day: 5, meals: ['Misto Quente', 'Filé com Arroz', 'Miojo'] }, { day: 6, meals: ['Cachorro-Quente', 'Macarronada'] }, { day: 7, meals: ['Miojo', 'Salgadinhos e Biscoitos'] }, ],
+            shoppingList: {
+                acougue: [ { item: 'Filé de Carne', qty: '2.1 kg' }, { item: 'Picanha', qty: '1.4 kg' }, { item: 'Linguiça Toscana', qty: '1.05 kg' }, { item: 'Linguiça Fina (molho)', qty: '~600g' }, { item: 'Frango (asa/coxa)', qty: '1.4 kg' }, { item: 'Peito de Frango (desfiar)', qty: '700g' }, { item: 'Salsicha', qty: '21 unidades' }, { item: 'Presunto', qty: '~750g (1 peça)' }, { item: 'Queijo Mussarela', qty: '~750g (1 peça)' }, { item: 'Ovos', qty: '3 dúzias' } ],
+                mercearia: [ { item: 'Arroz', qty: '2 kg' }, { item: 'Macarrão', qty: '1.5 kg' }, { item: 'Miojo', qty: '21 unidades' }, { item: 'Pão de Cachorro-Quente', qty: '21 unidades' }, { item: 'Pão de Forma', qty: '3 pacotes' }, { item: 'Pão de Alho', qty: '1 pacote grande' }, { item: 'Batata Palha', qty: '1 pacote grande' }, { item: 'Batata Frita Congelada', qty: '2 pacotes' }, { item: 'Molho Branco', qty: '2 potes grandes' }, { item: 'Salgadinhos/Biscoitos', qty: '~1.5 kg' }, { item: 'Café em Pó', qty: '1 pacote' }, { item: 'Açúcar', qty: '1 kg' }, { item: 'Farofa Pronta', qty: '1 pacote' } ],
+                bebidas: [ { item: 'Cerveja', qty: '60 latas' }, { item: 'Refrigerante', qty: '22 garrafas (2L)' }, { item: 'Whisky Ballantine’s', qty: '5 garrafas' }, { item: 'Whisky Jack Daniel’s', qty: '2 garrafas' }, { item: 'Água Mineral', qty: '4 galões (5L)' }, { item: 'Leite', qty: '2 caixas (1L)' } ],
+                essenciais: [ { item: 'Tomate', qty: '~6 unidades' }, { item: 'Cebola', qty: '~5 unidades' }, { item: 'Alho', qty: '1 cabeça' }, { item: 'Cheiro-Verde', qty: '1 maço' }, { item: 'Óleo / Azeite', qty: '1 frasco' }, { item: 'Sal', qty: '1 kg' }, { item: 'Manteiga / Margarina', qty: '1 pote (500g)' }, { item: 'Carvão', qty: '1 saco (5kg)' }, { item: 'Detergente e Esponja', qty: '1 unidade cada' }, { item: 'Papel Toalha', qty: '2 rolos' }, { item: 'Sacos de Lixo', qty: '1 pacote' } ]
+            }
+        };
+        const categoryTitles = { acougue: '🥩 Açougue e Frios', mercearia: '🍞 Mercearia e Padaria', bebidas: '💧 Bebidas', essenciais: '✨ Hortifrúti e Essenciais' };
+        const vibrantPalette = ['#FF6F61', '#6B5B95', '#88B04B', '#F7CAC9', '#92A8D1', '#955B6B'];
+        let charts = {};
+
+        // --- FUNÇÕES DE DADOS (API) ---
+        async function loadAllPlans() {
+            showLoader('Carregando planos...');
+            try {
+                const response = await fetch(`${JSONBIN_API_URL}/latest`, { headers: { 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Meta': 'false' } });
+                if (response.status === 404) { allPlans = []; return; }
+                if (!response.ok) { throw new Error(`Erro HTTP: ${response.status} - ${await response.text()}`); }
+                const responseText = await response.text();
+                if (!responseText) { allPlans = []; return; }
+                const data = JSON.parse(responseText);
+                allPlans = Array.isArray(data) ? data : [];
+            } catch (error) {
+                console.error("Falha ao carregar planos:", error);
+                alert(`Não foi possível carregar os planos. Verifique suas chaves de API e a conexão. Erro: ${error.message}`);
+                allPlans = [];
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function saveAllPlans() {
+            const saveBtn = document.getElementById('save-plan-btn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Salvando...';
+            try {
+                const response = await fetch(JSONBIN_API_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY }, body: JSON.stringify(allPlans) });
+                if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+                return true;
+            } catch (error) {
+                console.error("Falha ao salvar planos:", error);
+                alert("Não foi possível salvar os planos.");
+                return false;
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Salvar Plano na Nuvem';
+            }
+        }
+
+        function resetCurrentPlan() { currentPlan = JSON.parse(JSON.stringify(defaultData)); }
+
+        // --- FUNÇÕES DE RENDERIZAÇÃO ---
+        function renderPlannerPage() {
+            document.getElementById('peopleCount').textContent = currentPlan.settings.people;
+            document.getElementById('daysCount').textContent = currentPlan.settings.days;
+            const mealCount = currentPlan.mealPlan.reduce((acc, day) => acc + day.meals.length, 0);
+            document.getElementById('mealsCount').textContent = mealCount;
+            renderMealPlan(document.getElementById('planner-meal-plan-container'), currentPlan, true);
+            renderShoppingList(document.getElementById('planner-shopping-list-container'), currentPlan, true);
+            renderMealTypesChart(currentPlan, 'planner-mealTypesChart');
+        }
+
+        function renderGalleryPage() {
+            const galleryContainer = document.getElementById('gallery-container');
+            galleryContainer.innerHTML = allPlans.length > 0 ? '' : '<p class="text-center text-gray-500">Nenhum plano salvo ainda. Crie um na aba "Planejar"!</p>';
+            allPlans.forEach(plan => {
+                const accordionItem = document.createElement('div');
+                accordionItem.className = 'bg-white rounded-xl shadow-lg overflow-hidden';
+                
+                const header = document.createElement('div');
+                header.className = 'accordion-header p-6 flex justify-between items-center hover:bg-gray-50';
+                header.innerHTML = `
+                    <div>
+                        <h2 class="text-2xl font-bold text-[#6B5B95]">${plan.name}</h2>
+                        <p class="text-sm text-gray-500">Criado por: ${plan.creatorName}</p>
+                    </div>
+                    <span class="text-2xl font-bold text-gray-400 transform transition-transform duration-300">&#9662;</span>
+                `;
+                header.addEventListener('click', () => toggleAccordion(header));
+
+                const content = document.createElement('div');
+                content.className = 'accordion-content';
+                content.id = `content-${plan.id}`;
+                content.innerHTML = '<!-- O conteúdo detalhado será renderizado aqui ao clicar -->';
+
+                accordionItem.appendChild(header);
+                accordionItem.appendChild(content);
+                galleryContainer.appendChild(accordionItem);
+            });
+        }
+
+        function renderFullPlanDetails(container, plan) {
+            container.innerHTML = `
+                <div class="grid grid-cols-1 gap-8">
+                    <div class="bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-2xl font-bold text-center mb-4">Visão Geral do Cardápio</h3>
+                        <div class="chart-container"><canvas id="mealTypesChart-${plan.id}"></canvas></div>
+                    </div>
+                    <div class="bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-2xl font-bold text-center mb-6">Cronograma Gastronômico</h3>
+                        <div id="meal-plan-${plan.id}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></div>
+                    </div>
+                    <div class="bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-2xl font-bold text-center mb-8">Lista de Compras Completa</h3>
+                        <div id="shopping-list-${plan.id}" class="grid grid-cols-1 lg:grid-cols-2 gap-8"></div>
+                    </div>
+                     <div class="text-center mt-4">
+                        <button class="delete-plan-btn bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600">Excluir este Plano</button>
+                    </div>
+                </div>
+            `;
+            
+            const deleteButton = container.querySelector('.delete-plan-btn');
+            if (deleteButton) {
+                deleteButton.addEventListener('click', (event) => deletePlan(event, plan.id));
+            }
+
+            renderMealPlan(document.getElementById(`meal-plan-${plan.id}`), plan, false);
+            renderShoppingList(document.getElementById(`shopping-list-${plan.id}`), plan, false);
+            renderMealTypesChart(plan, `mealTypesChart-${plan.id}`);
+        }
+
+        function renderMealPlan(container, plan, isEditable) {
+            container.innerHTML = '';
+            plan.mealPlan.forEach((day, dayIndex) => {
+                const mealsHtml = day.meals.map((meal, mealIndex) => isEditable ? `<li class="flex items-center justify-between"><span>${meal}</span><span class="delete-btn text-red-500 ml-2" onclick="removeMeal(${dayIndex}, ${mealIndex})">✖</span></li>` : `<li class="list-disc list-inside">${meal}</li>`).join('');
+                const card = document.createElement('div');
+                card.className = 'timeline-card border-l-[#FF6F61]';
+                card.innerHTML = `<p class="font-bold text-lg">Dia ${day.day}</p><ul class="list-none text-sm mt-2 space-y-2">${mealsHtml}</ul>`;
+                if (isEditable) { card.innerHTML += `<div class="mt-3"><input type="text" id="new-meal-${dayIndex}" placeholder="Nova refeição..." class="text-sm w-full"/><button class="text-sm bg-green-500 text-white px-2 py-1 rounded mt-1 w-full" onclick="addMeal(${dayIndex})">Adicionar</button></div>`; }
+                container.appendChild(card);
+            });
+        }
+
+        function renderShoppingList(container, plan, isEditable) {
+            container.innerHTML = '';
+            for (const category in plan.shoppingList) {
+                const itemsHtml = plan.shoppingList[category].map((item, index) => isEditable ? `<tr class="hover:bg-gray-50"><td class="p-2"><input type="text" value="${item.item}" onblur="updateItem('${category}', ${index}, 'item', this.value)"></td><td class="p-2"><input type="text" value="${item.qty}" onblur="updateItem('${category}', ${index}, 'qty', this.value)"></td><td class="p-2 text-center"><span class="delete-btn text-red-500" onclick="removeItem('${category}', ${index})">✖</span></td></tr>` : `<tr class="hover:bg-gray-50"><td class="p-2">${item.item}</td><td class="p-2">${item.qty}</td></tr>`).join('');
+                const tableContainer = document.createElement('div');
+                tableContainer.className = 'bg-white p-6 rounded-xl shadow-md';
+                tableContainer.innerHTML = `<h3 class="text-xl font-bold mb-4">${categoryTitles[category]}</h3><table class="w-full text-sm text-left"><thead class="bg-gray-50"><tr class="text-gray-600"><th class="p-2">Item</th><th class="p-2">Quantidade</th>${isEditable ? '<th class="p-2 w-8"></th>' : ''}</tr></thead><tbody class="divide-y divide-gray-200">${itemsHtml}</tbody></table>`;
+                if (isEditable) { tableContainer.innerHTML += `<div class="mt-4 flex gap-2"><input type="text" id="new-item-name-${category}" placeholder="Nome do item" class="flex-grow"><input type="text" id="new-item-qty-${category}" placeholder="Qtde" class="w-24"><button class="bg-green-500 text-white px-3 rounded" onclick="addItem('${category}')">+</button></div>`; }
+                container.appendChild(tableContainer);
+            }
+        }
+
+        // --- FUNÇÕES DE GRÁFICOS ---
+        function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+        function createChart(canvasId, type, data, options) { destroyChart(canvasId); const ctx = document.getElementById(canvasId).getContext('2d'); charts[canvasId] = new Chart(ctx, { type, data, options }); }
+        const baseChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 20, font: { size: 12 } } }, tooltip: { backgroundColor: '#1F2937', titleFont: { size: 14, weight: 'bold' }, bodyFont: { size: 12 }, padding: 12, cornerRadius: 6, boxPadding: 4 } } };
+        
+        function renderMealTypesChart(plan, canvasId) {
+            const mealCounts = {};
+            plan.mealPlan.flatMap(day => day.meals).forEach(meal => {
+                let type = 'Outros';
+                if (meal.toLowerCase().includes('filé')) type = 'Refeição Principal'; else if (meal.toLowerCase().includes('macarronada')) type = 'Refeição Principal'; else if (meal.toLowerCase().includes('churrasco')) type = 'Churrasco'; else if (meal.toLowerCase().includes('lanche') || meal.toLowerCase().includes('misto') || meal.toLowerCase().includes('miojo') || meal.toLowerCase().includes('cachorro-quente')) type = 'Lanches';
+                mealCounts[type] = (mealCounts[type] || 0) + 1;
+            });
+            createChart(canvasId, 'doughnut', { labels: Object.keys(mealCounts), datasets: [{ data: Object.values(mealCounts), backgroundColor: vibrantPalette, borderColor: '#F8F9FA', borderWidth: 4, hoverOffset: 8 }] }, { ...baseChartOptions });
+        }
+
+        // --- AÇÕES DO USUÁRIO ---
+        function updateMeal(dayIndex, mealIndex, newText) { currentPlan.mealPlan[dayIndex].meals[mealIndex] = newText; renderPlannerPage(); }
+        function removeMeal(dayIndex, mealIndex) { currentPlan.mealPlan[dayIndex].meals.splice(mealIndex, 1); renderPlannerPage(); }
+        function addMeal(dayIndex) { const input = document.getElementById(`new-meal-${dayIndex}`); if (input.value.trim()) { currentPlan.mealPlan[dayIndex].meals.push(input.value.trim()); input.value = ''; renderPlannerPage(); } }
+        function updateItem(category, index, key, value) { currentPlan.shoppingList[category][index][key] = value; renderPlannerPage(); }
+        function removeItem(category, index) { currentPlan.shoppingList[category].splice(index, 1); renderPlannerPage(); }
+        function addItem(category) { const nameInput = document.getElementById(`new-item-name-${category}`); const qtyInput = document.getElementById(`new-item-qty-${category}`); if (nameInput.value.trim()) { currentPlan.shoppingList[category].push({ item: nameInput.value.trim(), qty: qtyInput.value.trim() }); nameInput.value = ''; qtyInput.value = ''; renderPlannerPage(); } }
+        
+        async function saveCurrentPlan() {
+            const planName = prompt("Qual o nome deste plano? (Ex: Plano da Maria)", "Meu Plano");
+            if (!planName) return;
+            const creatorName = prompt("Qual o seu nome? (Criador do plano)", "Maria");
+            if (!creatorName) return;
+
+            currentPlan.id = Date.now().toString();
+            currentPlan.name = planName;
+            currentPlan.creatorName = creatorName;
+            allPlans.push(JSON.parse(JSON.stringify(currentPlan)));
+            const success = await saveAllPlans();
+            if (success) {
+                alert('Plano salvo com sucesso!');
+                switchTab('gallery');
+            }
+        }
+        
+        async function deletePlan(event, planId) {
+            event.stopPropagation();
+            prompt("ta apertando isso pq vagabundo?");
+            const password = prompt("Para excluir, digite a senha:");
+            if (password === "cudepomba") {
+                allPlans = allPlans.filter(p => p.id !== planId);
+                const success = await saveAllPlans();
+                if (success) {
+                    alert("Plano excluído com sucesso.");
+                    renderGalleryPage();
+                }
+            } else {
+                alert("Senha incorreta!");
+            }
+        }
+
+        // --- NAVEGAÇÃO E UI ---
+        function showLoader(message) { const loader = document.getElementById('loader'); loader.textContent = message; loader.style.display = 'flex'; }
+        function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+
+        function toggleAccordion(headerElement) {
+            const content = headerElement.nextElementSibling;
+            const planId = content.id.split('-')[1];
+            const plan = allPlans.find(p => p.id === planId);
+            
+            if (!plan) {
+                console.error("Erro: Plano não encontrado com ID:", planId);
+                return;
+            }
+            
+            // Lazy load content
+            if (content.innerHTML.includes('<!--')) {
+                renderFullPlanDetails(content, plan);
+            }
+
+            if (content.classList.contains('open')) {
+                content.classList.remove('open');
+                headerElement.querySelector('span').style.transform = 'rotate(0deg)';
+            } else {
+                // Opcional: fechar outros acordeões abertos
+                document.querySelectorAll('.accordion-content.open').forEach(openContent => {
+                    openContent.classList.remove('open');
+                    openContent.previousElementSibling.querySelector('span').style.transform = 'rotate(0deg)';
+                });
+                content.classList.add('open');
+                headerElement.querySelector('span').style.transform = 'rotate(180deg)';
+            }
+        }
+
+        function switchTab(tabName) {
+            const plannerPage = document.getElementById('planner-page');
+            const galleryPage = document.getElementById('gallery-page');
+            const plannerTab = document.getElementById('tab-planner');
+            const galleryTab = document.getElementById('tab-gallery');
+            if (tabName === 'planner') {
+                plannerPage.classList.remove('hidden');
+                galleryPage.classList.add('hidden');
+                plannerTab.classList.add('active');
+                galleryTab.classList.remove('active');
+                resetCurrentPlan();
+                renderPlannerPage();
+            } else {
+                galleryPage.classList.remove('hidden');
+                plannerPage.classList.add('hidden');
+                galleryTab.classList.add('active');
+                plannerTab.classList.remove('active');
+                renderGalleryPage();
+            }
+        }
+
+        // --- INICIALIZAÇÃO ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            resetCurrentPlan();
+            renderPlannerPage();
+            await loadAllPlans();
+            
+            document.getElementById('peopleCount').addEventListener('blur', (e) => { currentPlan.settings.people = parseInt(e.target.textContent) || 7; renderPlannerPage(); });
+            document.getElementById('daysCount').addEventListener('blur', (e) => { currentPlan.settings.days = parseInt(e.target.textContent) || 7; renderPlannerPage(); });
+            document.getElementById('save-plan-btn').addEventListener('click', saveCurrentPlan);
+            document.getElementById('tab-planner').addEventListener('click', () => switchTab('planner'));
+            document.getElementById('tab-gallery').addEventListener('click', () => { switchTab('gallery'); });
+        });
+    </script>
+</body>
+</html>
